@@ -9,7 +9,19 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE TypeOperators #-}
-module Data.Semigroup.Action where
+module Data.Semigroup.Action(
+  -- * Action classes
+  Action(..), actNtimesMonoid, actNtimesGroup,
+  RightAction(..), ractNtimesMonoid, ractNtimesGroup,
+
+  Torsor(..),
+  
+  -- * Newtype wrappers
+  Regular(..),
+  Mapped(..),
+  Placed(..),
+  Pt(..), unPt
+) where
 
 import Data.Semigroup
 import Data.Monoid qualified as Monoid
@@ -93,10 +105,27 @@ ractNtimesMonoid n x s = ract x (mtimesDefault n s)
 ractNtimesGroup :: (Integral b, RightAction s x, Group s) => b -> x -> s -> x
 ractNtimesGroup n x s = ract x (pow s n)
 
+-- | @Torsor g x@ is a type @x@ with /free/ and /transitive/ group action of @g@.
+-- 
+-- For an @Action g x@, it is called /transitive/ if every equation
+--
+-- > x = g `act` y
+-- 
+-- has a solution. It is called /free/ if no such equation has multiple solution
+-- at a time. A /free transitive/ action therefore has unique solution for every
+-- combination of @x, y@.
+-- 
+-- The @'difference' x y@ function gives the unique solution for each @x@ and @y@.
+class (Group g, Action g x) => Torsor g x where
+  difference :: x -> x -> g
+  default difference :: (g ~ x) => x -> x -> g
+  difference x y = x ~~ y
+
 -- trivial instances
 
 instance Action () ()
 instance RightAction () ()
+instance Torsor () ()
 
 instance Action Void Void
 instance RightAction Void Void
@@ -128,8 +157,14 @@ instance (Functor f, RightAction s x) => RightAction s (Mapped f x) where
 instance (Action s x, Action s' x') => Action (s,s') (x,x') where
   act ~(s,s') (x,x') = (act s x, act s' x')
 
+instance (Torsor g x, Torsor g' x') => Torsor (g,g') (x,x') where
+  difference (x,x') (y,y') = (difference x y, difference x' y')
+
 instance (Action s x, Action s' x', Action s'' x'') => Action (s,s',s'') (x,x',x'') where
   act ~(s,s',s'') (x,x',x'') = (act s x, act s' x', act s'' x'')
+
+instance (Torsor g x, Torsor g' x', Torsor g'' x'' ) => Torsor (g,g',g'') (x,x',x'') where
+  difference (x,x',x'') (y,y',y'') = (difference x y, difference x' y', difference x'' y'')
 
 -- sum instances
 
@@ -182,6 +217,9 @@ instance (Semigroup s) => Action s (Regular s) where
 instance (Semigroup s) => RightAction s (Regular s) where
   ract (Regular x) s = Regular (x <> s)
 
+instance (Group g) => Torsor g (Regular g) where
+  difference (Regular x) (Regular y) = x ~~ y
+
 instance Action (Endo a) (Endo a)
 instance Num a => Action (Sum a) (Sum a)
 instance Num a => Action (Product a) (Product a)
@@ -213,6 +251,11 @@ instance Bits a => RightAction (And a) (And a)
 instance Bits a => RightAction (Xor a) (Xor a)
 instance Bits a => RightAction (Ior a) (Ior a)
 instance FiniteBits a => RightAction (Iff a) (Iff a)
+
+instance Num a => Torsor (Sum a) (Sum a)
+instance Fractional a => Torsor (Product a) (Product a)
+--instance Bits a => Torsor (Xor a) (Xor a)
+--instance FiniteBits a => Torsor (Iff a) (Iff a)
 
 -- Dual actions
 
